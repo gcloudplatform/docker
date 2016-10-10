@@ -184,7 +184,7 @@ func (s *DockerSuite) TestRunLinksContainerWithContainerName(c *check.C) {
 }
 
 //test --link use container id to link target
-func (s *DockerSuite) TestRunLinksContainerWithContainerId(c *check.C) {
+func (s *DockerSuite) TestRunLinksContainerWithContainerID(c *check.C) {
 	// TODO Windows: This test cannot run on a Windows daemon as the networking
 	// settings are not populated back yet on inspect.
 	testRequires(c, DaemonIsLinux)
@@ -1709,7 +1709,7 @@ func (s *DockerSuite) TestRunState(c *check.C) {
 }
 
 // Test for #1737
-func (s *DockerSuite) TestRunCopyVolumeUidGid(c *check.C) {
+func (s *DockerSuite) TestRunCopyVolumeUIDGID(c *check.C) {
 	// Not applicable on Windows as it does not support uid or gid in this way
 	testRequires(c, DaemonIsLinux)
 	name := "testrunvolumesuidgid"
@@ -1864,7 +1864,7 @@ func (s *DockerSuite) TestRunInteractiveWithRestartPolicy(c *check.C) {
 		dockerCmdWithResult("stop", name).Assert(c, icmd.Success)
 	}()
 
-	result = icmd.WaitOnCmd(10*time.Second, result)
+	result = icmd.WaitOnCmd(60*time.Second, result)
 	c.Assert(result, icmd.Matches, icmd.Expected{ExitCode: 11})
 }
 
@@ -2484,7 +2484,7 @@ func (s *DockerSuite) TestRunModeIpcContainerNotRunning(c *check.C) {
 	}
 }
 
-func (s *DockerSuite) TestRunModePidContainer(c *check.C) {
+func (s *DockerSuite) TestRunModePIDContainer(c *check.C) {
 	// Not applicable on Windows as uses Unix-specific capabilities
 	testRequires(c, SameHostDaemon, DaemonIsLinux)
 
@@ -2509,7 +2509,7 @@ func (s *DockerSuite) TestRunModePidContainer(c *check.C) {
 	}
 }
 
-func (s *DockerSuite) TestRunModePidContainerNotExists(c *check.C) {
+func (s *DockerSuite) TestRunModePIDContainerNotExists(c *check.C) {
 	// Not applicable on Windows as uses Unix-specific capabilities
 	testRequires(c, DaemonIsLinux)
 	out, _, err := dockerCmdWithError("run", "-d", "--pid", "container:abcd1234", "busybox", "top")
@@ -2518,7 +2518,7 @@ func (s *DockerSuite) TestRunModePidContainerNotExists(c *check.C) {
 	}
 }
 
-func (s *DockerSuite) TestRunModePidContainerNotRunning(c *check.C) {
+func (s *DockerSuite) TestRunModePIDContainerNotRunning(c *check.C) {
 	// Not applicable on Windows as uses Unix-specific capabilities
 	testRequires(c, SameHostDaemon, DaemonIsLinux)
 
@@ -2576,7 +2576,7 @@ func (s *DockerSuite) TestContainerNetworkMode(c *check.C) {
 	}
 }
 
-func (s *DockerSuite) TestRunModePidHost(c *check.C) {
+func (s *DockerSuite) TestRunModePIDHost(c *check.C) {
 	// Not applicable on Windows as uses Unix-specific capabilities
 	testRequires(c, SameHostDaemon, DaemonIsLinux, NotUserNamespace)
 
@@ -2958,7 +2958,7 @@ func (s *DockerSuite) TestRunContainerWithRmFlagCannotStartContainer(c *check.C)
 	}
 }
 
-func (s *DockerSuite) TestRunPidHostWithChildIsKillable(c *check.C) {
+func (s *DockerSuite) TestRunPIDHostWithChildIsKillable(c *check.C) {
 	// Not applicable on Windows as uses Unix specific functionality
 	testRequires(c, DaemonIsLinux, NotUserNamespace)
 	name := "ibuildthecloud"
@@ -4518,4 +4518,23 @@ func (s *DockerSuite) TestRunStoppedLoggingDriverNoLeak(c *check.C) {
 
 	// NGoroutines is not updated right away, so we need to wait before failing
 	c.Assert(waitForGoroutines(nroutines), checker.IsNil)
+}
+
+// Handles error conditions for --credentialspec. Validating E2E success cases
+// requires additional infrastructure (AD for example) on CI servers.
+func (s *DockerSuite) TestRunCredentialSpecFailures(c *check.C) {
+	testRequires(c, DaemonIsWindows)
+	attempts := []struct{ value, expectedError string }{
+		{"rubbish", "invalid credential spec security option - value must be prefixed file:// or registry://"},
+		{"rubbish://", "invalid credential spec security option - value must be prefixed file:// or registry://"},
+		{"file://", "no value supplied for file:// credential spec security option"},
+		{"registry://", "no value supplied for registry:// credential spec security option"},
+		{`file://c:\blah.txt`, "path cannot be absolute"},
+		{`file://doesnotexist.txt`, "The system cannot find the file specified"},
+	}
+	for _, attempt := range attempts {
+		_, _, err := dockerCmdWithError("run", "--security-opt=credentialspec="+attempt.value, "busybox", "true")
+		c.Assert(err, checker.NotNil, check.Commentf("%s expected non-nil err", attempt.value))
+		c.Assert(err.Error(), checker.Contains, attempt.expectedError, check.Commentf("%s expected %s got %s", attempt.value, attempt.expectedError, err))
+	}
 }
